@@ -18,7 +18,7 @@ namespace RentGenerationTool
 
             string connectionString = @"AuthType=OAuth;
             Username = Tuhan@klymkopavel.onmicrosoft.com; 
-            Password = Ehuvid57; 
+            Password = ; 
             Url = https://org646d956a.crm4.dynamics.com; 
             AppId=51f81489-12ee-4a9e-aaae-a2591f45987d;
             RedirectUri=app://58145B91-0C36-4500-8554-080854F2AC97";
