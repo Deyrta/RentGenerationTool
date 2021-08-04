@@ -27,22 +27,13 @@ namespace RentGenerationTool
 
             Random gen = new Random();
 
-            for (int i = 1; i <= 100; i++)
+            for (int i = 1; i <= 40000; i++)
             {
                 using (svcContext context = new svcContext(service))
                 {
                     run.generateRandomRent(i, context, service);
                 }
             }
-            //using (svcContext context = new svcContext(service))
-            //{
-            //    //run.generateRandomRent(i, context, service);
-
-            //    cds_rent dskjfl = new cds_rent();  // need to test
-            //    var rent = context.cds_carclassSet[gen.Next(context.cds_carclassSet.Count())]
-            //    dskjfl.cds_Carclass = rent;
-            //    service.Create(dskjfl);
-            //}
             Console.ReadLine();
         }
     }
@@ -54,12 +45,13 @@ namespace RentGenerationTool
 
         public void generateRandomRent(int rentNumber, svcContext context, CrmServiceClient service)
         {
+            Console.WriteLine($"Creating №{rentNumber} \t {DateTime.Now}");
             rent = new cds_rent();
             CarTransferReportGenerator reportsGenerator = new CarTransferReportGenerator();
 
             rent.cds_rent1 = $"Rent #{rentNumber}";
             rent.cds_Reservedpickup = generateRandomDate(new DateTime(2019, 1, 1), new DateTime(2020, 12, 31));
-            DateTime date = (DateTime)rent.cds_Reservedpickup; // added this because cant add days to cds_Reservedpickup
+            DateTime date = (DateTime)rent.cds_Reservedpickup;
             rent.cds_Reservedhandover = generateRandomDate(date, date.AddDays(30));
             rent.cds_contact_cds_rent_Customer = generateRandomCustomer(rent, context);
             rent.cds_Pickuplocation = generateRandomPickupLocation(rent);
@@ -83,7 +75,7 @@ namespace RentGenerationTool
             rent.cds_Paid = generatePaidStatus(rent);
 
             service.Create(rent);
-            Console.WriteLine($"Rent №{rentNumber} created with name {rent.cds_rent1}");
+            Console.WriteLine($"Rent №{rentNumber} created with name {rent.cds_rent1} \t {DateTime.Now}");
         }
 
     }
@@ -102,7 +94,7 @@ namespace RentGenerationTool
                 report.cds_Type = type;
                 report.cds_Car = rent.cds_Car;
                 service.Create(report);
-                return context.cds_cartransferreportSet.Single(x => x.cds_CarTransferReport == report.cds_CarTransferReport);
+                return context.cds_cartransferreportSet.Single(x => x.cds_cartransferreportId == report.cds_cartransferreportId);
             }
             else // Return
             {
@@ -117,7 +109,7 @@ namespace RentGenerationTool
                 }
                 report.cds_Car = rent.cds_Car;
                 service.Create(report);
-                return context.cds_cartransferreportSet.Single(x => x.cds_CarTransferReport == report.cds_CarTransferReport);
+                return context.cds_cartransferreportSet.Single(x => x.cds_cartransferreportId == report.cds_cartransferreportId);
             }
         }
     }
@@ -209,12 +201,12 @@ namespace RentGenerationTool
 
         protected bool generatePaidStatus(cds_rent rent)
         {
-            if (rent.statuscode == new OptionSetValue(754300001)) // confirmed
-                return gen.Next(100) < 90;
-            else if (rent.statuscode == new OptionSetValue(754300002)) // Renting
-                return gen.Next(100) + gen.NextDouble() < 99.9;
+            if (rent.statuscode == new OptionSetValue((int)statusOptionSet.confirmed)) // confirmed
+                return gen.Next(100) < 90;  // 10% chance
+            else if (rent.statuscode == new OptionSetValue((int)statusOptionSet.confirmed)) // Renting
+                return gen.Next(1000) + gen.NextDouble() < 998; // 99.9% chance
             else // returned
-                return gen.Next(100) + gen.NextDouble() < 99.8;
+                return gen.Next(1000) + gen.NextDouble() < 997; // 99.8% chance
         }
 
         protected Contact generateRandomCustomer(cds_rent rent, svcContext context)
