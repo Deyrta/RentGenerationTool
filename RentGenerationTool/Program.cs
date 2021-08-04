@@ -25,14 +25,24 @@ namespace RentGenerationTool
 
             CrmServiceClient service = new CrmServiceClient(connectionString);
 
+            Random gen = new Random();
+
             for (int i = 1; i <= 100; i++)
             {
                 using (svcContext context = new svcContext(service))
                 {
                     run.generateRandomRent(i, context, service);
                 }
-                
             }
+            //using (svcContext context = new svcContext(service))
+            //{
+            //    //run.generateRandomRent(i, context, service);
+
+            //    cds_rent dskjfl = new cds_rent();  // need to test
+            //    var rent = context.cds_carclassSet[gen.Next(context.cds_carclassSet.Count())]
+            //    dskjfl.cds_Carclass = rent;
+            //    service.Create(dskjfl);
+            //}
             Console.ReadLine();
         }
     }
@@ -51,26 +61,24 @@ namespace RentGenerationTool
             rent.cds_Reservedpickup = generateRandomDate(new DateTime(2019, 1, 1), new DateTime(2020, 12, 31));
             DateTime date = (DateTime)rent.cds_Reservedpickup; // added this because cant add days to cds_Reservedpickup
             rent.cds_Reservedhandover = generateRandomDate(date, date.AddDays(30));
-            rent = generateRandomCarClasssAndCar(context, rent);
-            rent = generateRandomCustomer(rent, context);
+            rent.cds_contact_cds_rent_Customer = generateRandomCustomer(rent, context);
             rent.cds_Pickuplocation = generateRandomPickupLocation(rent);
             rent.cds_Returnlocation = generateRandomReturnLocation(rent);
-            rent = generateRandomStatus(rent);
+            generateRandomStatus(ref rent);
+            generateRandomCarClasssAndCar(context, ref rent);
 
-            
-
-            if(rent.statuscode.Value == 754300002) // if renting
+            if (rent.statuscode.Value == (int)statusOptionSet.renting) // if renting
             {
                 rent.cds_Actualpickup = generateRandomDate(date, date.AddDays(30));
-                rent = reportsGenerator.generateCarTransferReport(false, rent, service, rentNumber, context);
+                rent.cds_Pickupreport = reportsGenerator.generateCarTransferReport(false, rent, service, rentNumber, context).ToEntityReference();
             }
-            if (rent.statuscode.Value == 754300005) // Returned
+            if (rent.statuscode.Value == (int)statusOptionSet.returned) // Returned
             {
                 rent.cds_Actualpickup = generateRandomDate(date, date.AddDays(30));
                 date = (DateTime)rent.cds_Actualpickup;
                 rent.cds_Actualreturn = generateRandomDate(date, date.AddDays(30));
-                rent = reportsGenerator.generateCarTransferReport(true, rent, service, rentNumber, context);
-                rent = reportsGenerator.generateCarTransferReport(false, rent, service, rentNumber, context);
+                rent.cds_Returnreport = reportsGenerator.generateCarTransferReport(true, rent, service, rentNumber, context).ToEntityReference();
+                rent.cds_Pickupreport = reportsGenerator.generateCarTransferReport(false, rent, service, rentNumber, context).ToEntityReference();
             }
             rent.cds_Paid = generatePaidStatus(rent);
 
@@ -82,7 +90,7 @@ namespace RentGenerationTool
 
     class CarTransferReportGenerator
     {
-        public cds_rent generateCarTransferReport(bool type, cds_rent rent,  CrmServiceClient service, int rentNumber, svcContext context) 
+        public cds_cartransferreport generateCarTransferReport(bool type, cds_rent rent,  CrmServiceClient service, int rentNumber, svcContext context) 
         {
             cds_cartransferreport report = new cds_cartransferreport();
             Random gen = new Random();
@@ -94,7 +102,7 @@ namespace RentGenerationTool
                 report.cds_Type = type;
                 report.cds_Car = rent.cds_Car;
                 service.Create(report);
-                rent.cds_Pickupreport = context.cds_cartransferreportSet.Single(x => x.cds_CarTransferReport == report.cds_CarTransferReport).ToEntityReference();
+                return context.cds_cartransferreportSet.Single(x => x.cds_CarTransferReport == report.cds_CarTransferReport);
             }
             else // Return
             {
@@ -109,88 +117,95 @@ namespace RentGenerationTool
                 }
                 report.cds_Car = rent.cds_Car;
                 service.Create(report);
-                rent.cds_Returnreport = context.cds_cartransferreportSet.Single(x => x.cds_CarTransferReport == report.cds_CarTransferReport).ToEntityReference();
+                return context.cds_cartransferreportSet.Single(x => x.cds_CarTransferReport == report.cds_CarTransferReport);
             }
-
-            return rent;
         }
     }
 
     class RentGenerator
     {
         private Random gen = new Random();
+        private List<string> attributesList;
+        protected enum statusOptionSet
+        {
+            created = 754300000,
+            confirmed = 754300001,
+            renting = 754300002,
+            returned = 754300005,
+            canceled = 754300006
+        }
+        protected enum locationOptionSet
+        {
+            airport = 754300000,
+            cityCenter = 754300001,
+            office = 754300002
+        }
+
         protected DateTime generateRandomDate(DateTime startDate, DateTime endDate)
         {
             int range = (endDate - startDate).Days;
             return startDate.AddDays(gen.Next(range)).AddHours(gen.Next(0, 24)).AddMinutes(gen.Next(0, 60));
         }
 
-        protected cds_rent generateRandomCarClasssAndCar(svcContext context, cds_rent rent)
+        protected void generateRandomCarClasssAndCar(svcContext context, ref cds_rent rent)
         {
-            var CarClasses = from a in context.cds_carclassSet
+            var CarClasses = from a in context.cds_carclassSet  
                                select a;
 
-            List<string> carTypes = new List<string>();
+            attributesList = new List<string>();
 
             foreach (var carClass in CarClasses)
-                carTypes.Add(carClass.Attributes["cds_carclass"].ToString());
+                attributesList.Add(carClass.Attributes["cds_carclass"].ToString());
 
-
-            rent.cds_Carclass = context.cds_carclassSet.Single(x => x.cds_carclass1 == carTypes[gen.Next(0, carTypes.Count)]).ToEntityReference();
-            rent.cds_Price = context.cds_carclassSet.Single(x => x.cds_carclassId == rent.cds_Carclass.Id).cds_Price;
+            rent.cds_Carclass = context.cds_carclassSet.Single(x => x.cds_carclass1 == attributesList[gen.Next(0, attributesList.Count)]).ToEntityReference();
+            var cdscarclass = rent.cds_Carclass; // cant use ref parameters in querry
+            rent.cds_Price = context.cds_carclassSet.Single(x => x.cds_carclassId == cdscarclass.Id).cds_Price;
 
             var cares = from a in context.cds_carSet
-                        where a.cds_Carclass == rent.cds_Carclass
+                        where a.cds_Carclass == cdscarclass
                         select a;
 
-            List<string> cars = new List<string>();
+            attributesList= new List<string>();
 
             foreach (var car in cares)
-                cars.Add(car.Attributes["cds_cars"].ToString());
+                attributesList.Add(car.Attributes["cds_cars"].ToString());
 
-            rent.cds_Car = context.cds_carSet.Single(x => x.cds_cars == cars[gen.Next(0, cars.Count)]).ToEntityReference();
-
-            return rent;
+            rent.cds_Car = context.cds_carSet.Single(x => x.cds_cars == attributesList[gen.Next(0, attributesList.Count)]).ToEntityReference();
         }
 
-        protected cds_rent generateRandomStatus(cds_rent rent)
+        protected void generateRandomStatus( ref cds_rent rent)
         {
             int chance = gen.Next(0, 100);
             if(chance <=4) // 5%  chance created
             {
                 rent.statecode = cds_rentState.Active;
-                rent.statuscode = new OptionSetValue(754300000);
-                return rent;
+                rent.statuscode = new OptionSetValue((int)statusOptionSet.created);
             }
             else if (chance <= 9 && chance >=5) // 5% chance Confirmed
             {
                 rent.statecode = cds_rentState.Active;
-                rent.statuscode = new OptionSetValue(754300001);
-                return rent;
+                rent.statuscode = new OptionSetValue((int)statusOptionSet.confirmed);
             }
             else if (chance <= 14 && chance >= 10) // 5% chance Renting
             {
                 rent.statecode = cds_rentState.Active;
-                rent.statuscode = new OptionSetValue(754300002);
-                return rent;
+                rent.statuscode = new OptionSetValue((int)statusOptionSet.renting);
             }
             else if(chance <= 24 && chance >= 15) // 10% chance Canceled
             {
                 rent.statecode = cds_rentState.Inactive;
-                rent.statuscode = new OptionSetValue(754300006);
-                return rent;
+                rent.statuscode = new OptionSetValue((int)statusOptionSet.canceled);
             }
             else // 75% chance Returned
             {
                 rent.statecode = cds_rentState.Inactive;
-                rent.statuscode = new OptionSetValue(754300005);
-                return rent;
+                rent.statuscode = new OptionSetValue((int)statusOptionSet.returned);
             }
         }
 
-        protected OptionSetValue generateRandomPickupLocation(cds_rent rent) => rent.cds_Pickuplocation = new OptionSetValue(gen.Next(754300000, 754300003));
+        protected OptionSetValue generateRandomPickupLocation(cds_rent rent) => rent.cds_Pickuplocation = new OptionSetValue(gen.Next((int)locationOptionSet.airport, (int)locationOptionSet.office+1));
 
-        protected OptionSetValue generateRandomReturnLocation(cds_rent rent) => rent.cds_Returnlocation = new OptionSetValue(gen.Next(754300000, 754300003));
+        protected OptionSetValue generateRandomReturnLocation(cds_rent rent) => rent.cds_Returnlocation = new OptionSetValue(gen.Next((int)locationOptionSet.airport, (int)locationOptionSet.office + 1));
 
         protected bool generatePaidStatus(cds_rent rent)
         {
@@ -202,19 +217,17 @@ namespace RentGenerationTool
                 return gen.Next(100) + gen.NextDouble() < 99.8;
         }
 
-        protected cds_rent generateRandomCustomer(cds_rent rent, svcContext context)
+        protected Contact generateRandomCustomer(cds_rent rent, svcContext context)
         {
             var customersEntity = from a in context.ContactSet
                                   select a;
 
-            List<String> customers = new List<string>();
+            attributesList = new List<string>();
 
             foreach (var customer in customersEntity)
-                customers.Add(customer.FullName);
+                attributesList.Add(customer.FullName);
 
-            rent.cds_contact_cds_rent_Customer = context.ContactSet.Single(x => x.FullName == customers[gen.Next(0, customers.Count)]);
-
-            return rent;
+            return context.ContactSet.Single(x => x.FullName == attributesList[gen.Next(0, attributesList.Count)]); ;
         }
     }
 }
